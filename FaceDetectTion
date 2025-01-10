@@ -25,20 +25,6 @@ def is_fist(hand_landmarks):
     Detect if a hand gesture is a fist based on landmark positions.
     """
     try:
-        required_landmarks = [
-            mp_hands.HandLandmark.WRIST,
-            mp_hands.HandLandmark.THUMB_TIP,
-            mp_hands.HandLandmark.INDEX_TIP,
-            mp_hands.HandLandmark.MIDDLE_TIP,
-            mp_hands.HandLandmark.RING_TIP,
-            mp_hands.HandLandmark.PINKY_TIP,
-        ]
-        
-        # Ensure all required landmarks are detected
-        for landmark in required_landmarks:
-            if not hand_landmarks.landmark[landmark]:
-                raise ValueError(f"Missing landmark: {landmark}")
-
         wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
         finger_tips = [
             hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP],
@@ -51,6 +37,31 @@ def is_fist(hand_landmarks):
         return all(finger_tip.y > wrist.y for finger_tip in finger_tips)
     except (AttributeError, ValueError) as e:
         print(f"Error in fist detection: {e}")
+        return False
+
+def is_smiling(face_landmarks, frame_shape):
+    """
+    Detect if the face is smiling based on mouth landmarks.
+    """
+    try:
+        # Convert normalized landmarks to pixel coordinates
+        def to_pixel(landmark):
+            return int(landmark.x * frame_shape[1]), int(landmark.y * frame_shape[0])
+
+        # Get key landmarks for the mouth
+        upper_lip = face_landmarks.landmark[13]  # Upper lip
+        lower_lip = face_landmarks.landmark[14]  # Lower lip
+        left_mouth_corner = face_landmarks.landmark[78]  # Left corner of the mouth
+        right_mouth_corner = face_landmarks.landmark[308]  # Right corner of the mouth
+
+        # Calculate distances
+        lip_distance = abs(lower_lip.y - upper_lip.y)
+        mouth_width = abs(left_mouth_corner.x - right_mouth_corner.x)
+
+        # Threshold for smiling (adjust as necessary)
+        return lip_distance / mouth_width > 0.2
+    except Exception as e:
+        print(f"Error in smile detection: {e}")
         return False
 
 while cap.isOpened():
@@ -100,21 +111,29 @@ while cap.isOpened():
     # Face mesh detection
     if face_mesh_results.multi_face_landmarks:
         for face_landmarks in face_mesh_results.multi_face_landmarks:
-            # Draw landmarks and connections for the face
-            mp_drawing.draw_landmarks(
-                frame,
-                face_landmarks,
-                mp_face_mesh.FACEMESH_TESSELATION,
-                landmark_drawing_spec=None,
-                connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style()
-            )
-            mp_drawing.draw_landmarks(
-                frame,
-                face_landmarks,
-                mp_face_mesh.FACEMESH_CONTOURS,
-                landmark_drawing_spec=None,
-                connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style()
-            )
+            try:
+                # Check for smile
+                if is_smiling(face_landmarks, frame.shape):
+                    cv2.putText(frame, "You smiled!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+                    print("You smiled!")
+
+                # Draw landmarks and connections for the face
+                mp_drawing.draw_landmarks(
+                    frame,
+                    face_landmarks,
+                    mp_face_mesh.FACEMESH_TESSELATION,
+                    landmark_drawing_spec=None,
+                    connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style()
+                )
+                mp_drawing.draw_landmarks(
+                    frame,
+                    face_landmarks,
+                    mp_face_mesh.FACEMESH_CONTOURS,
+                    landmark_drawing_spec=None,
+                    connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style()
+                )
+            except Exception as e:
+                print(f"Error processing face landmarks: {e}")
 
     # Display the frame
     cv2.imshow('Hand and Face Mesh Detection', frame)
